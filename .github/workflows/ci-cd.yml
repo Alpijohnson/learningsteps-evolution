@@ -1,0 +1,102 @@
+name: ci-cd
+
+on:
+  push:
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  ACR_NAME: acrlsevocybersec
+  IMAGE: acrlsevocybersec.azurecr.io/learningsteps
+  RG: rg-lsevo
+  AKS: aks-lsevo
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy - Secrets und Abhängigkeiten
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Trivy - IaC (Terraform, Kubernetes, Dockerfile)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: config
+          scan-ref: .
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+
+  build:
+    needs: security
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint (ruff)
+        run: |
+          pip install ruff
+          ruff check api --select E9,F
+
+      - name: Image bauen
+        run: docker build -t $IMAGE:${{ github.sha }} .
+
+      - name: Smoke-Test
+        run: |
+          docker run -d --name app -p 8000:8000 \
+            -e DATABASE_URL=postgresql://user:pw@localhost:5432/db \
+            $IMAGE:${{ github.sha }}
+          for i in $(seq 1 15); do
+            curl -sf http://localhost:8000/docs -o /dev/null && exit 0
+            sleep 2
+          done
+          docker logs app
+          exit 1
+
+      - name: Trivy - Image-Scan vor dem Push
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}:${{ github.sha }}
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+      - name: Azure-Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Push in die ACR
+        run: |
+          az acr login --name $ACR_NAME
+          docker push $IMAGE:${{ github.sha }}
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Kubeconfig holen
+        run: az aks get-credentials -g $RG -n $AKS --overwrite-existing
+
+      - name: Neues Image ausrollen
+        run: |
+          kubectl set image deployment/learningsteps '*='$IMAGE:${{ github.sha }} -n learningsteps
+          kubectl rollout status deployment/learningsteps -n learningsteps --timeout=180s
