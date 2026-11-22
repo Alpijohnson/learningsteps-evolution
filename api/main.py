@@ -25,6 +25,9 @@ app.include_router(journal_router)
 def root():
     return RedirectResponse(url="/docs")
 
+@app.get("/version", tags=["meta"])
+def version():
+    return {"app": "LearningSteps API", "version": "1.1-cicd-proof"}
 
 # Log when the app starts
 logger.info("LearningSteps API started successfully")
