@@ -1,0 +1,7 @@
+# Bewusst akzeptiert (Student-Budget, siehe Bericht)
+# AKS-API nicht auf IPs begrenzt: GitHub-Runner haben wechselnde IPs, Deploy wuerde brechen
+AZU-0041
+# Network Policy: nachtraeglich nur mit Cluster-Neuaufbau moeglich, Verbesserung fuer spaeter
+AZU-0043
+# Key Vault Netzwerk-ACL: Deny braucht Private Endpoint (Zusatzkosten)
+AZU-0013

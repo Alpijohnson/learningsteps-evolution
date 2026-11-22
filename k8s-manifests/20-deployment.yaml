@@ -34,6 +34,7 @@ spec:
                   key: DATABASE_URL
           securityContext:
             allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
           resources:
@@ -56,10 +57,14 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: secrets-store
               mountPath: /mnt/secrets
               readOnly: true
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: secrets-store
           csi:
             driver: secrets-store.csi.k8s.io

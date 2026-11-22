@@ -11,12 +11,23 @@ spec:
         azure.workload.identity/use: "true"
     spec:
       serviceAccountName: learningsteps-sa
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
       restartPolicy: Never
       containers:
         - name: psql
           image: postgres:16
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           command: ["sh", "-c", "psql \"$DATABASE_URL\" -v ON_ERROR_STOP=1 -f /sql/database_setup.sql"]
           env:
+            - name: HOME
+              value: /tmp
             - name: PGSSLMODE
               value: require
             - name: DATABASE_URL
@@ -32,12 +43,16 @@ spec:
               cpu: 200m
               memory: 128Mi
           volumeMounts:
+            - name: tmp
+              mountPath: /tmp
             - name: sql
               mountPath: /sql
             - name: secrets-store
               mountPath: /mnt/secrets
               readOnly: true
       volumes:
+        - name: tmp
+          emptyDir: {}
         - name: sql
           configMap:
             name: db-schema
