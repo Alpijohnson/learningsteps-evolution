@@ -87,7 +87,7 @@ Die Pipeline hat nur `AcrPush` auf die ACR und die `Azure Kubernetes Service Clu
 | Grünlauf nach Rücknahme | Run 45036474437: security, build, deploy erfolgreich |
 | Selbstheilung | Pod gelöscht, Ersatz nach 3 s gestartet, nach 36 s wieder 2/2 Pods bereit, `GET /entries` 200 |
 | Monitoring | Commits `719eff1`, `e3217fc`; Runs 45038117028, 45039056018; Prometheus 2/2 UP |
-| Infrastructure Recovery | bitte ergänzen (`terraform destroy` und `apply`) |
+| Infrastructure Recovery | `terraform destroy` (19 Ressourcen, 7 min 27 s) und `apply` (19 Ressourcen, 8 min 10 s) ohne Fehler; nach Wiedereinrichtung Run 45047939536 grün, alle Endpunkte 200 (gesamt ca. 28 min) |
 
 ![Prometheus Targets](docs/images/prometheus-targets.png)
 
@@ -133,4 +133,15 @@ az aks stop -g rg-lsevo -n aks-lsevo
 az postgres flexible-server stop -g rg-lsevo -n psql-lsevo-cybersec
 ```
 
-Ausführlicher Projektbericht: bitte ergänzen (Link oder Datei).
+Ausführlicher Projektbericht: separates Dokument (Abgabe).
+
+## Infrastructure Recovery: Nacharbeiten nach `terraform apply`
+
+Terraform baut die Azure-Ressourcen. Danach sind diese Schritte nötig:
+
+1. `az aks get-credentials` (neuer Cluster)
+2. Pipeline-Rollen AcrPush (ACR) und Cluster User Role (AKS) neu vergeben
+3. Neue Client-ID von `id-lsevo-app` (`terraform output app_identity_client_id`) in `01-serviceaccount.yaml` und `02-secretproviderclass.yaml` eintragen
+4. `kubectl apply -f k8s-manifests/` (inkl. Schema-Job)
+5. Secret `grafana-admin` mit Zufallswert anlegen
+6. Commit und Push: Die Pipeline baut das Image, pusht es in die neue ACR und deployt es
